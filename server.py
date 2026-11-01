@@ -11,6 +11,7 @@ from http.cookies import SimpleCookie
 from urllib.parse import urlsplit
 from research import Store, Engine, ResearchError, ROLES, now
 from sample import worked_example
+from reviewer import ReviewerAccess
 
 ROOT=Path(__file__).resolve().parent
 
@@ -27,7 +28,7 @@ class VisitorWorkspaces:
     def close(self):
         for _,engine in self.backends.values():engine.jobs.shutdown(wait=False,cancel_futures=True)
 
-def handler_for(store,engine,workspaces=None):
+def handler_for(store,engine,workspaces=None,reviewer=None):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self,*args):pass
         def backend(self):
@@ -40,7 +41,14 @@ def handler_for(store,engine,workspaces=None):
             if not re.fullmatch(r'[a-f0-9]{64}',session):
                 session=secrets.token_hex(32)
                 self.session_cookie=f'three_angles_session={session}; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=2592000'
+            self.visitor_session=session
             return workspaces.get(session)
+        def research_action(self,body,units,action):
+            if body.get('connection',{}).get('reviewer'):
+                if reviewer is None or not getattr(self,'visitor_session',None):raise ResearchError('Reviewer access is not enabled.')
+                if not body.get('connection',{}).get('consent'):raise ResearchError('Allow the brief to be sent for live research.')
+                return reviewer.run(self.visitor_session,units,action)
+            return action(body.get('connection',{}))
         def reply(self,value,status=200,mime='application/json'):
             raw=value if isinstance(value,bytes) else json.dumps(value).encode()
             self.send_response(status);self.send_header('Content-Type',mime);self.send_header('Content-Length',str(len(raw)))
@@ -53,6 +61,7 @@ def handler_for(store,engine,workspaces=None):
                 if path=='/':self.reply((ROOT/'src/index.html').read_bytes(),mime='text/html; charset=utf-8')
                 elif path in {'/src/app.js','/src/style.css'}:
                     self.reply((ROOT/path.lstrip('/')).read_bytes(),mime='text/javascript' if path.endswith('.js') else 'text/css')
+                elif path=='/api/reviewer':self.reply({'enabled':bool(reviewer and reviewer.available())})
                 elif path=='/api/cases':self.reply({'cases':store.list()})
                 elif path.startswith('/api/cases/'):
                     case=store.get(path.split('/')[3]);self.reply(case)
@@ -69,17 +78,20 @@ def handler_for(store,engine,workspaces=None):
                 if not 0<size<=50000:self.reply({'error':'Request is too large or empty.'},413);return
                 body=json.loads(self.rfile.read(size));path=urlsplit(self.path).path
                 if not isinstance(body,dict):raise ResearchError('Expected a JSON object.')
-                if path=='/api/cases':
-                    self.reply(engine.start(body.get('brief'),body.get('connection',{})),201)
+                if path=='/api/reviewer/connect':
+                    if reviewer is None or not getattr(self,'visitor_session',None):raise ResearchError('Reviewer access is not enabled.')
+                    reviewer.authorize(self.visitor_session,body.get('code'),body.get('consent'));self.reply({'ok':True})
+                elif path=='/api/cases':
+                    self.reply(self.research_action(body,3,lambda config:engine.start(body.get('brief'),config)),201)
                 elif path=='/api/sample':
                     case=worked_example();store.put(case);self.reply(case,201)
                 elif path.startswith('/api/cases/'):
                     parts=path.strip('/').split('/');case_id=parts[2];action=parts[3] if len(parts)>3 else ''
                     if action=='followup':
-                        engine.followup(case_id,body.get('role'),body.get('instruction'),body.get('connection',{}));self.reply({'ok':True})
+                        self.research_action(body,1,lambda config:engine.followup(case_id,body.get('role'),body.get('instruction'),config));self.reply({'ok':True})
                     elif action=='cancel':engine.cancel(case_id);self.reply({'ok':True})
                     elif action=='retry-synthesis':
-                        engine.retry_synthesis(case_id,body.get('connection',{}));self.reply({'ok':True})
+                        self.research_action(body,1,lambda config:engine.retry_synthesis(case_id,config));self.reply({'ok':True})
                     elif action=='decision':
                         choice=body.get('choice');note=body.get('note','')
                         if choice not in {'pursue','reshape','drop','more_research'} or not isinstance(note,str) or len(note)>1200:raise ResearchError('Choose a decision and a short rationale.')
@@ -100,8 +112,9 @@ if __name__=='__main__':
     data=Path(os.environ.get('DATA_DIR',str(ROOT/'.data')))
     store=Store(data/'investigations.sqlite3');engine=Engine(store)
     workspaces=VisitorWorkspaces(data/'visitors') if os.environ.get('HOSTED')=='1' else None
+    reviewer=ReviewerAccess(data/'reviewer.sqlite3') if workspaces else None
     try:
-        server=ThreadingHTTPServer((args.host,args.port),handler_for(store,engine,workspaces))
+        server=ThreadingHTTPServer((args.host,args.port),handler_for(store,engine,workspaces,reviewer))
     except OSError:
         engine.jobs.shutdown(wait=False)
         parser.exit(1,f'Port {args.port} is unavailable. Close the existing Three Angles server or choose --port 8767.\n')

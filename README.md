@@ -40,6 +40,12 @@ Import `hv-ai/three-angles` from GitHub into Replit. The included `.replit` file
 
 Research runs in background threads. For reliable long-running investigations, use a single always-running instance rather than multiple autoscaling instances. The workspace uses local SQLite files; deployment storage should be treated as temporary unless backed by persistent storage. Export important research before restarting or republishing.
 
+### Temporary reviewer access
+
+Set `NEBIUS_API_KEY`, `TAVILY_API_KEY` and a `REVIEW_ACCESS_CODE` of at least 12 characters in the host's secret manager. Reviewers enter the code and consent to sending their brief to Nebius and Tavily. The API keys stay on the server.
+
+`REVIEW_MODEL` defaults to `Qwen/Qwen3-30B-A3B-Instruct-2507`. The default shared allowance is 30 action units: an initial investigation uses three, while a follow-up or comparison retry uses one. Failed attempts count. This limits research actions, not an exact dollar amount. The ledger survives process restarts if its SQLite file is retained; a deployment that loses local files also loses the ledger. Access expires at `2026-11-22T00:00:00+00:00` by default. Remove the secrets or shut down the deployment when the review ends.
+
 ### Render (alternative)
 
 The repository includes a Render Blueprint in `render.yaml`. Connect this repository in Render, create a Blueprint and deploy the `three-angles` web service. It uses Python directly, listens on the assigned port and checks `/health`.
@@ -90,6 +96,6 @@ That was a useful reminder: not finding a feature in the first few sources does 
 python3 -m unittest discover -s tests -v
 ```
 
-The 36 automated tests cover orchestration, source references, follow-ups and recovery. A complete Nebius/Tavily investigation was also checked on October 31, 2026. See [the validation record](docs/VALIDATION.txt) for details.
+The 38 automated tests cover orchestration, source references, follow-ups and recovery. A complete Nebius/Tavily investigation was also checked on October 31, 2026. See [the validation record](docs/VALIDATION.txt) for details.
 
 Source excerpts help trace a finding back to a page; they do not prove that its interpretation is correct. The workspace supports research and a human decision. Establishing product demand still needs conversations with users and practical tests.

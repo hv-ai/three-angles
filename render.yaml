@@ -3,7 +3,7 @@ services:
     name: three-angles
     runtime: python
     plan: free
-    buildCommand: python -m compileall -q server.py research.py sample.py
+    buildCommand: python -m compileall -q server.py research.py sample.py reviewer.py
     startCommand: python server.py
     healthCheckPath: /health
     envVars:
