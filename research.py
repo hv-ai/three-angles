@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import closing
 from datetime import datetime, timezone
 import copy
+import difflib
 import ipaddress
 import json
 from pathlib import Path
@@ -122,7 +123,13 @@ def check_report(args,sources,opened,role,version):
         sid=f['source_id'];quote=f['quote'].strip()
         if f['kind']=='observed' and (not sid or not quote):raise ResearchError('Observed findings require a source and exact quote.')
         if sid or quote:
-            if sid not in sources or sid not in opened or not quote or normal(quote) not in normal(sources[sid]['text']):raise ResearchError('Citation must quote an opened source exactly.')
+            if sid not in sources:raise ResearchError(f'Finding {i}: source ID {sid!r} is unknown. Use an ID returned by your source tools.')
+            if sid not in opened:raise ResearchError(f'Finding {i}: open source {sid} before citing it.')
+            if not quote or normal(quote) not in normal(sources[sid]['text']):
+                text=sources[sid]['text']
+                spans=[x.strip()[:500] for x in re.split(r'(?<=[.!?])\s+|\n+',text) if x.strip()]
+                closest=max(spans,key=lambda x:difflib.SequenceMatcher(None,normal(quote),normal(x)).ratio(),default='')
+                raise ResearchError(f'Finding {i}: quote does not match opened source {sid}. Copy verbatim text; do not paraphrase inside quotes. A source-text excerpt for inspection (not an approved claim): {json.dumps(closest)}. Revise the finding to fit its evidence, choose another exact excerpt, or mark it unknown with empty source_id and quote.')
         checked.append({**f,'id':f'{role}-v{version}-F{i}','quote_checked':bool(sid)})
     return {'conclusion':args['conclusion'],'findings':checked,'unknowns':unknowns,'next_test':args['next_test'],'version':version,'created_at':now()}
 
@@ -239,7 +246,7 @@ class Engine:
                         if len(calls)>1 and any(c.get('function',{}).get('name')=='publish_findings' for c in calls):
                             raise ResearchError('Publish findings in a separate tool call after all source reads finish.')
                         signature=json.dumps({'tool':name,'args':args},sort_keys=True)
-                        if signature in completed_actions:raise ResearchError('Identical completed action blocked. Use a new query, a different source, or publish what is known.')
+                        if signature in completed_actions and name!='open_source':raise ResearchError('Identical completed action blocked. Use a new query, a different source, or publish what is known.')
                         if name not in {t['function']['name'] for t in allowed}:raise ResearchError('This tool is unavailable at the current budget boundary.')
                         if name=='search_web':
                             query=args.get('query','')

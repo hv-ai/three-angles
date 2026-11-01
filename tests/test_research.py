@@ -258,6 +258,26 @@ class ResearchTests(unittest.TestCase):
         final=self.wait(e,c['id']);a=final['agents']['problem']
         self.assertEqual(a['status'],'done');self.assertEqual(a['search_calls'],0)
         self.assertTrue(any(x['action']=='reuse_search' for x in final['events']))
+    def test_quote_error_can_reopen_cached_source_and_submit_correction(self):
+        class QuoteRepair(FakeClient):
+            def extract(self,url):raise AssertionError('Cached full text must not be extracted again')
+            def model(self,messages,tools=None):
+                outputs=[m for m in messages if m['role']=='tool']
+                if tools and len(outputs)==2:
+                    result=super().model(messages,tools)
+                    fn=result['choices'][0]['message']['tool_calls'][0]['function']
+                    args=json.loads(fn['arguments']);args['findings'][0]['quote']='Teams always record every decision in a document.'
+                    fn['arguments']=json.dumps(args);return result
+                if tools and len(outputs)==3:
+                    error=json.loads(outputs[-1]['content'])['error']
+                    assert 'Finding 1' in error and 'Teams record decisions in a document.' in error
+                    source=json.loads(outputs[1]['content'])
+                    return call('open_source',{'source_id':source['id']})
+                return super().model(messages,tools)
+        e=self.engine(QuoteRepair);c=e.start(BRIEF,{});final=self.wait(e,c['id'])
+        self.assertEqual(final['status'],'ready')
+        self.assertTrue(all(a['model_calls']==5 and a['search_calls']==1 for a in final['agents'].values()))
+        self.assertEqual(sum(x['action']=='tool_error' for x in final['events']),3)
 
 class HTTPTests(unittest.TestCase):
     def setUp(self):

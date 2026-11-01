@@ -1,6 +1,6 @@
 Three Angles submission validation
 Date: 2026-10-31
-Result: 30 tests passed on Python 3.13.2.
+Result: 31 tests passed on Python 3.13.2.
 JavaScript syntax check: passed using node --check src/app.js.
 
 Automated tests use controlled model and Tavily responses. They exercise real Python orchestration, SQLite writes and local HTTP handlers, but are not a measurement of live model quality.
@@ -17,3 +17,5 @@ Browser verification: curated example, source inspector and sample-to-live bound
 A subsequent live retry returned four native source-read calls, exposing the batch-cardinality cap. The cap is removed: all calls receive observations, but only three sources may be opened; excess source reads receive budget feedback. Recovery of a failed investigator with saved search results no longer permits a new web search. Regression tests verify both cases. Live completion after this update remains unverified.
 
 Live recovery verified: Problem investigator completed on 2026-10-31 using saved searches, three opened sources and two model responses. The other investigators still require recovery. Manual review found overconfident negative product-feature claims and an Acta quote that supports changed-decision history. Prompt instructions now distinguish missing documentation from verified feature absence and require synthesis to check quotes against investigator conclusions. The saved original report is retained unchanged for review.
+
+The Existing-solutions live recovery reached its call limit after repeated quote mismatches and blocked attempts to reread sources. The correction now identifies the offending finding/source and returns a verbatim source-text excerpt for inspection without approving the claim. Cached source rereads are permitted without new extraction; repeated searches remain blocked. A simulated regression exercises invalid quote, cached reread and valid resubmission within five model calls. Live completion of this investigator after the fix remains to be verified.
