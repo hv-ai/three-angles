@@ -34,6 +34,14 @@ To explore without API keys, open the worked example. It is labeled as a curated
 
 ## Hosting
 
+### Replit
+
+Import `hv-ai/three-angles` from GitHub into Replit. The included `.replit` file configures the Python runtime, Run command, hosted visitor isolation and port mapping. Run the app and check the preview before publishing. Each visitor supplies their own model and Tavily keys in the app; no shared provider keys are required in Replit Secrets.
+
+Research runs in background threads. For reliable long-running investigations, use a single always-running instance rather than multiple autoscaling instances. The workspace uses local SQLite files; deployment storage should be treated as temporary unless backed by persistent storage. Export important research before restarting or republishing.
+
+### Render (alternative)
+
 The repository includes a Render Blueprint in `render.yaml`. Connect this repository in Render, create a Blueprint and deploy the `three-angles` web service. It uses Python directly, listens on the assigned port and checks `/health`.
 
 Hosted mode separates visitor histories using an anonymous, secure browser cookie. No provider keys need to be configured on the host: visitors connect their own tools in the app. Local mode retains the original single-user workspace.
