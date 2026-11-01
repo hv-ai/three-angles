@@ -1,90 +1,79 @@
 # Three Angles
 
-Give an idea to three independent investigators. Compare what they find, challenge a conclusion, and decide what to test next.
+A research workspace for checking an idea before building it.
 
-I built this for people who want to investigate an idea before spending time building it. Web research often confirms the first appealing explanation. Three Angles deliberately separates three questions:
+I wanted to look at an idea from more than one direction: does the problem matter, what already exists, and what assumption could make it fail? Three Angles gives each question its own investigator, then brings their findings together.
 
-- **Problem:** Who experiences this problem, and what do they do today?
-- **Existing solutions:** What already exists, and where does the idea overlap?
-- **Skeptic:** Which assumption could make the idea fail?
+You enter a brief. The investigators search the web, read sources and produce separate reports. You can open the evidence behind a finding, challenge it, and send one investigator back with a more specific question. Earlier reports stay available so you can see what changed.
 
-The useful part happens after the first reports. Select **Challenge** on a finding and give one investigator a specific question. It does new research, keeps the previous report, and updates the combined recommendation. The final decision remains yours.
+## What you can do
 
-## Run locally
+- Research a brief from three perspectives: the problem, existing solutions and a skeptic.
+- Read source excerpts alongside findings, with source claims and investigator inferences labeled separately.
+- Challenge a finding without restarting the whole investigation.
+- Compare the reports and record your own decision: pursue, reshape, drop or research further.
+- Reopen saved investigations and export the research and your notes.
 
-Requires Python 3.10+ and a browser. The app has no third-party Python dependencies.
+## Run it locally
+
+You need Python 3.10 or later and a browser. There are no third-party Python dependencies.
 
 ```bash
 python3 server.py
 ```
 
-Open http://127.0.0.1:8766. On macOS, you can also double-click `Start.command`. Keep the server running while research is in progress. If another app uses that port, run `python3 server.py --port 8767`.
+Open [localhost:8766](http://127.0.0.1:8766/). On macOS, you can also double-click `Start.command`. For another port:
 
-Click **Connect your tools** and configure a Nebius or Fireworks model with native function calling, plus a Tavily API key. Use the exact model ID enabled on your account. Keys stay in page memory and active server jobs; they are excluded from saved investigations and exports. Reloading clears the connection. Provider calls use your account credits.
+```bash
+python3 server.py --port 8767
+```
 
-For a preview without keys, choose **Open a worked example**. It is prepared content, clearly labeled, and makes no model or search calls.
+In **Connect your tools**, enter a Nebius or Fireworks API key, the exact ID of a model that supports native function calling, and a Tavily API key. Live research uses credits from those accounts. Keys stay in page memory and active server jobs; they are not saved with investigations. Refreshing the page clears the connection.
 
-## Try this investigation
-
-> An assistant for small remote teams that turns recurring meeting transcripts into a searchable log of decisions, owners and unresolved questions. Investigate the documented problem, overlap with existing meeting tools, and assumptions that could make this fail. Focus on finding the latest decision when it changes across meetings.
-
-Then challenge a finding:
-
-> Check whether the named products document tracking decisions that are reversed across meetings. Separate confirmed features from capabilities you could not verify. Does this change the recommendation?
+To explore without API keys, open the worked example. It is labeled as a curated example and makes no API calls.
 
 ## How it works
 
-```mermaid
-flowchart TD
-    Brief[Your brief] --> P[Problem investigator]
-    Brief --> E[Existing solutions investigator]
-    Brief --> S[Skeptic]
-    P --> Compare[Compare findings]
-    E --> Compare
-    S --> Compare
-    Compare --> Human[Your decision or challenge]
-    Human --> Followup[Research one question again]
-    Followup --> Compare
-```
+The three investigators use the same configured model in separate conversations, each with a different role and its own sources. Python worker threads run them concurrently.
 
-Each investigator has a separate model conversation, source registry and tool history. Python worker threads run them concurrently. They use the same configured model, with different role instructions. A separate synthesis call compares the finished reports using a structured compile_recommendation tool result. Native tool-call batches are handled sequentially, and a response without a tool call receives a bounded correction within the existing call limit.
+Each investigator can choose three tools:
 
-The three tools are `search_web`, `open_source`, and `publish_findings`. An investigator chooses a tool, receives its result, and chooses the next step. Each round allows at most seven model calls, two searches and three opened sources per investigator. Repeated successful searches are blocked; already-opened sources can be reread from cached text without another extraction. Transient service errors retry once. The initial round allows up to 21 investigator calls plus one synthesis call; retries are additional HTTP attempts.
-
-Tavily provides public-web search and extraction. Nebius or Fireworks supplies the language model through native tool calls. This project uses custom Python orchestration, not LangGraph, a vector database, or a trained custom model.
-
-## History and recovery
-
-SQLite stores briefs, evidence, reports, revisions and human decisions in `.data/investigations.sqlite3`. The model selects excerpt IDs from opened sources; the application inserts the corresponding verbatim text. Unknown IDs and unopened citations are rejected. Findings distinguish observed source claims from inferences and unanswered questions. A quote match establishes text provenance, not whether the conclusion follows from it.
-
-Completed reports remain available if another investigator fails. You can retry that investigator. When its search returned sources but no report was completed, recovery reuses those saved results without another web search. Source extraction may still be needed for pages not previously opened. If only the final comparison fails, **Retry comparison using saved research** avoids repeating searches. Stopping research prevents further steps; a provider request already accepted may still be billed. Restarting the server marks unfinished work interrupted and preserves its earlier evidence.
-
-This is a local research workspace. It does not send messages, make purchases or publish research externally. Public pages can expose overlap and assumptions; product demand still needs interviews or experiments.
-
-## Code and validation
-
-| File | Responsibility |
+| Tool | Purpose |
 | --- | --- |
-| `research.py` | Tool loop, model transport, specialist roles, persistence and recovery |
-| `server.py` | Local HTTP server and request handling |
-| `src/` | HTML, CSS and JavaScript interface |
-| `sample.py` | Curated example with separate sample labeling |
-| `tests/test_research.py` | Orchestration, provider-adapter and HTTP tests |
-| `docs/` | Architecture, project overview, validation and demo guide |
+| `search_web` | Find relevant public pages through Tavily |
+| `open_source` | Read a source and obtain excerpts |
+| `publish_findings` | Submit a structured report linked to those excerpts |
+
+A separate model call compares the completed reports. A challenge creates a new round for the selected investigator and updates the comparison when it finishes. Each round is bounded to seven model calls, two searches and three opened sources per investigator.
+
+The backend uses Python's standard library: `http.server` for the local server, `concurrent.futures` for workers, `urllib` for API requests and `sqlite3` for storage. The frontend is plain HTML, CSS and JavaScript.
+
+Investigations are stored locally in `.data/investigations.sqlite3`. If a step fails, completed research is retained. You can retry one investigator, or retry just the comparison using the saved reports.
+
+## An example from testing
+
+I tested a brief about tracking decisions that change across meetings. The initial research suggested a gap in existing meeting tools. The skeptic found vendor pages describing reversal or contradiction tracking, which challenged that claim. The final comparison recommended reshaping the idea.
+
+That was a useful reminder: not finding a feature in the first few sources does not mean it doesn't exist. Vendor descriptions also need to be checked before treating them as proven capabilities.
+
+## Project files
+
+| File | Contents |
+| --- | --- |
+| `research.py` | Investigator loop, provider requests, storage and recovery |
+| `server.py` | Local server and API routes |
+| `src/` | Browser interface |
+| `sample.py` | Curated worked example |
+| `tests/test_research.py` | Backend tests with simulated provider responses |
+| `docs/PROJECT.md` | Architecture notes |
+| `docs/VALIDATION.txt` | Test coverage and live verification record |
+
+## Tests
 
 ```bash
 python3 -m unittest discover -s tests -v
 ```
 
-**35 automated tests pass** as of October 31, 2026. Tests use simulated provider responses to exercise concurrency, follow-ups, cancellation, tool errors and source checks. They do not measure live research quality. A live Nebius/Tavily investigation and final comparison also completed on October 31, 2026, after the recovery fixes. The comparison surfaced a counterexample to the initial gap claim and recommended reshaping the idea. This verifies the workflow, not general research accuracy; the detailed record is in `docs/VALIDATION.txt`.
+The 35 automated tests cover orchestration, source references, follow-ups and recovery. A complete Nebius/Tavily investigation was also checked on October 31, 2026. See [the validation record](docs/VALIDATION.txt) for details.
 
-## Week 3 materials
-
-- [Project overview](docs/Three_Angles_Project_Overview.docx)
-- [Five-minute demo guide](docs/DEMO_GUIDE.md)
-- [Architecture and workflow notes](docs/PROJECT.md)
-- [Validation record](docs/VALIDATION.txt)
-
-The source pack for the curated example contains short snapshots from the GitLab communication handbook and official Otter and Fireflies pages. Live investigations retrieve their own sources. No model training was performed.
-
-Design references reviewed during submission preparation: [STORM and Co-STORM](https://github.com/stanford-oval/storm), [Deep Agents](https://github.com/langchain-ai/deepagents), and [Open Deep Research](https://github.com/langchain-ai/open_deep_research). These are references, not libraries used by this implementation.
+Source excerpts help trace a finding back to a page; they do not prove that its interpretation is correct. The workspace supports research and a human decision. Establishing product demand still needs conversations with users and practical tests.

@@ -1,27 +1,47 @@
-Three Angles submission validation
-Date: 2026-10-31
-Result: 35 tests passed on Python 3.13.2.
-JavaScript syntax check: passed using node --check src/app.js.
+Three Angles — validation record
+Checked: October 31, 2026
 
-Automated tests use controlled model and Tavily responses. They exercise real Python orchestration, SQLite writes and local HTTP handlers, but are not a measurement of live model quality.
+Automated checks
+35 tests passed on Python 3.13.2. JavaScript syntax checking also passed.
+Tests use simulated model and Tavily responses, with real Python orchestration,
+SQLite writes and local HTTP handlers.
 
-Coverage includes concurrent independent investigators; bounded loops; follow-up isolation; preserved source/report revisions; quote provenance; synthesis references; cancellation; restart recovery; atomic event writes; credential exclusion; transient HTTP retry; unavailable tool rejection; null provider usage; and comparison-only retry.
+Coverage
+- Concurrent investigators with independent conversations and source registries
+- Bounded tool loops and matching responses for native tool-call batches
+- Targeted follow-ups and retained report revisions
+- Excerpt ID resolution and rejection of unknown or unopened citations
+- Comparison references and comparison-only retry
+- Cancellation, interrupted-job recovery and atomic event writes
+- Credential exclusion and transient HTTP retries
+- Unavailable tool rejection and untrusted-data instructions
 
-The injection-boundary check verifies that both model stages receive the untrusted-data instruction. It is not a claim that all prompt injections or jailbreaks are defeated. Unavailable tools are rejected in code.
+These checks do not measure live research quality or establish resistance to
+all prompt injections. A source quote match establishes provenance, not truth
+or support for every interpretation.
 
-Live provider verification: First live attempt on 2026-10-31 reached Nebius and Tavily. All three searches returned sources. The run stopped at the next model responses because the adapter required exactly one tool call. Six investigator model calls, three searches and 8,463 reported tokens were recorded; no synthesis was produced. Elapsed time was approximately 6.12 seconds.
+Live verification
+A Nebius/Tavily investigation completed on October 31, 2026, using
+Qwen/Qwen3-30B-A3B-Instruct-2507. All three investigators submitted reports and
+the final comparison returned a reshape recommendation.
 
-The adapter now supports up to three native calls per response and a bounded correction for missing tool calls. Added regression tests cover matching tool-response IDs for batched reads and recovery from a prose-only response. Full live completion remains to be verified after this fix.
-Browser verification: curated example, source inspector and sample-to-live boundary checked locally. This is not a live research demonstration.
+The brief concerned tracking decisions that change across meetings. The skeptic
+found Town and Groundnote vendor descriptions of reversal or contradiction
+tracking, challenging an earlier blanket feature-gap claim. These are vendor
+claims, not independent tests of the products. An adoption opportunity remains
+a hypothesis requiring user research.
 
-A subsequent live retry returned four native source-read calls, exposing the batch-cardinality cap. The cap is removed: all calls receive observations, but only three sources may be opened; excess source reads receive budget feedback. Recovery of a failed investigator with saved search results no longer permits a new web search. Regression tests verify both cases. Live completion after this update remains unverified.
+The saved investigation records 30 cumulative investigator model calls and
+three searches across development and recovery rounds. The comparison call is
+separate. These totals are not a fresh-run cost or latency benchmark.
 
-Live recovery verified: Problem investigator completed on 2026-10-31 using saved searches, three opened sources and two model responses. The other investigators still require recovery. Manual review found overconfident negative product-feature claims and an Acta quote that supports changed-decision history. Prompt instructions now distinguish missing documentation from verified feature absence and require synthesis to check quotes against investigator conclusions. The saved original report is retained unchanged for review.
+Fixes checked during this run
+- Handle batched native tool calls rather than requiring exactly one per turn
+- Return source-budget feedback rather than reject an entire read batch
+- Allow cached rereads and reuse saved searches during recovery
+- Resolve quotes through excerpt IDs rather than require the model to copy text
+- Use a structured native tool result for the final comparison
 
-The Existing-solutions live recovery reached its call limit after repeated quote mismatches and blocked attempts to reread sources. The correction now identifies the offending finding/source and returns a verbatim source-text excerpt for inspection without approving the claim. Cached source rereads are permitted without new extraction; repeated searches remain blocked. A simulated regression exercises invalid quote, cached reread and valid resubmission within five model calls. Live completion of this investigator after the fix remains to be verified.
-
-A further live attempt still failed exact-copy quote validation. The native tool contract now uses excerpt IDs: open_source returns up to 24 source spans with IDs, publish_findings selects an ID, and code inserts the verbatim span. Invented IDs and unopened-source citations remain rejected. The compatibility validator still checks literal quotes for old fixtures. Three new local tests verify ID resolution, span provenance, and full investigator completion using the new contract. Live completion after this change remains unverified.
-
-All three live investigators have now submitted findings. The Skeptic cites Town leadership-decision-log and Groundnote decision-tracking vendor pages as counterexamples to a blanket feature-gap claim. These are vendor claims, not independent product tests. The final comparison failed under its previous free-form JSON contract; its unrecorded response cannot establish the precise cause. Comparison now uses a structured native compile_recommendation result with clearer failure reporting. The existing saved reports can be compared without rerunning investigators or search. Full live comparison remains to be verified.
-
-End-to-end live verification completed on 2026-10-31: all three investigators submitted reports and the native structured comparison returned reshape with two issues. The comparison identified evidence contradicting the initial feature-gap claim. The saved run records 30 cumulative investigator model calls and three searches across all development/recovery rounds, not a fresh-run benchmark. The comparison call is separate from that investigator counter. Vendor feature descriptions and a possible adoption opportunity remain claims/hypotheses requiring human review. No further research call is needed to record the human decision or export this completed run.
+Browser checks
+The curated example, evidence inspector and sample-to-live boundary were
+checked locally. The curated example is labeled and makes no provider calls.

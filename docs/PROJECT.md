@@ -1,58 +1,46 @@
-# A practical project, not a staged debate
+# Architecture
 
-## Intended user and outcome
+## Research flow
 
-A person considering a product/project idea wants to discover whether a real workflow exists, what overlaps with existing solutions, and which assumption needs testing first. They enter one brief and receive three independently researched perspectives, a comparison of material issues and a concrete next experiment. They retain the final decision.
-
-## Concrete behavior
-
-The investigator chooses a query, calls search, opens source IDs and submits findings through a validated native tool. The UI shows the actual query and observations. The roles run in separate model conversations concurrently. Each sees its own first-round evidence rather than a shared drafted answer.
-
-Clicking **Challenge** creates an explicit research direction for the selected investigator. It performs new searches/openings under a new revision. The other investigators' reports remain. The synthesis is invalidated, the prior version is archived, and a new synthesis is generated from the current reports. This is the central interaction to demonstrate.
-
-## Architecture
+A brief starts three independent investigator conversations: problem, existing solutions and skeptic. Each has its own role instructions, source registry and tool history. Python worker threads run the first round concurrently.
 
 ```mermaid
 flowchart TD
-  A[User brief] --> B[Problem investigator]
+  A[Brief] --> B[Problem investigator]
   A --> C[Existing-solutions investigator]
   A --> D[Skeptic]
-  B --> E[Compare actual findings]
+  B --> E[Compare findings]
   C --> E
   D --> E
-  E --> F[Human decision or targeted research direction]
-  F --> B
-  F --> C
-  F --> D
+  E --> F[Human decision or challenge]
+  F --> G[Targeted follow-up]
+  G --> E
 ```
 
-Each investigator uses search, source opening and report submission. SQLite serializes event/report updates; native worker threads execute the independent jobs in parallel. Credentials are passed to the active transport client, not the persisted case.
+The model chooses a native tool call. Python validates and executes it, returns the observation, and requests the next action. Nebius and Fireworks are supported model providers; Tavily handles web search and extraction. The orchestration is implemented directly in Python.
 
-## Week 3 demonstration
+## Sources and reports
 
-1. **Brief:** enter a specific idea with a target user and present workaround.
-2. **Actual work:** show different queries and opened sources from the three investigators.
-3. **Specific findings:** open a named competitor capability and a distinct observed workflow example. Point out what remains unproven.
-4. **Human direction:** select a material question and ask one investigator to search for a counterexample or verify feature overlap.
-5. **Changed result:** show the new revision, preserved old report and recalculated synthesis. Do not claim the conclusion must change; no change is legitimate if the evidence supports it.
-6. **Decision:** record pursue, reshape, drop or more research, with a rationale and next observable experiment.
+`search_web` returns source IDs. `open_source` reads a source and returns bounded excerpts with IDs. In `publish_findings`, the model selects those excerpt IDs; the application inserts the original text. Unknown excerpt IDs and citations to unopened sources are rejected.
 
-## Evaluation
+Reports distinguish source claims, investigator inferences and untested questions. This checks where quoted text came from. It does not establish whether a source is accurate or whether the conclusion follows from it.
 
-Automated tests verify actual concurrent worker execution, independent contexts/tool registries, targeted follow-up isolation, retained revisions/sources, invalid quote rejection, synthesized finding references, bounded loops, temporary-service retries, partial failures, cancellation, restart recovery, atomic SQLite event writes, local HTTP behavior and credential exclusion.
+A separate native `compile_recommendation` call compares the completed reports. It returns a recommendation, references to findings that need discussion, and a proposed next experiment.
 
-The provider responses in these tests are simulated. No API keys were supplied during development. Real-provider accuracy, query quality, source quality and product usefulness have not been established by these tests. Before a live demo, validate the exact chosen model and Tavily account. Add a small independently labeled benchmark of briefs if making performance claims.
+## Follow-ups and state
 
-## Creativity and user experience
+A challenge starts a new round for one investigator. Previous reports are retained, the comparison is invalidated, and a new comparison uses the current reports when the follow-up completes.
 
-The custom interface starts with the user's idea rather than workflow internals. Independent perspectives appear in color-coded research notebooks. The discussion distinguishes a contradiction from a trade-off or missing evidence. Challenges create work; they do not generate a decorative debate. There is no invented consensus score or forced “winner.”
+SQLite stores briefs, events, sources, revisions and human decisions. Updates are serialized to preserve concurrent worker writes. Credentials are passed to active clients and are excluded from persisted investigations and exports.
 
-## Implementation history
+## Budgets and recovery
 
-The user rejected the earlier finance and agent-rehearsal prototypes as repetitive or theoretical, then authorized three investigators with distinct roles. This build implemented a new live research backend and a brief-first interface. It did not merely rename the prior dashboard.
+Each investigator round allows seven model calls, two searches and three opened sources. Native tool-call batches are processed sequentially. Excess source requests receive budget feedback. Repeated successful searches are blocked; cached source text can be reread without another extraction.
 
-The worked example is deliberately curated and labeled. It uses a real documentation practice and named product claims so the sample illustrates an actual overlap question, while preserving the distinction between sample text and live execution.
+Transient service errors retry once. A failed investigator retains its evidence and completed reports. Recovery can reuse saved search results without another search. A failed comparison can be retried separately. Restarting the server marks unfinished work interrupted. Cancellation stops subsequent steps, although an already accepted provider request may still incur charges.
 
-## Known limits
+## Interface
 
-Web evidence cannot establish product demand by itself. A vendor's published claim is not an independent test. Role prompts may still yield correlated reasoning because the same model provider can serve all three sessions. Quote checks cannot establish entailment. Searches and extraction may miss sources or truncate text. Synthesis may fail; partial reports are retained. A localhost app is not a hosted multiuser service.
+The browser uses plain HTML, CSS and JavaScript. Three color-coded investigator panels show progress, findings and source activity. The evidence inspector, challenge action, revision history and decision notes keep review in the same workspace.
+
+The app runs on a local Python HTTP server. It has not been deployed as a hosted multiuser service.
