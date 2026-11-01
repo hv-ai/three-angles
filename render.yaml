@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: three-angles
+    runtime: python
+    plan: free
+    buildCommand: python -m compileall -q server.py research.py sample.py
+    startCommand: python server.py
+    healthCheckPath: /health
+    envVars:
+      - key: HOST
+        value: 0.0.0.0
+      - key: HOSTED
+        value: "1"
+      - key: DATA_DIR
+        value: /tmp/three-angles
+      - key: PYTHON_VERSION
+        value: 3.13.2

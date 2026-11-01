@@ -12,7 +12,7 @@ import urllib.error
 import io
 from research import Store, Engine, Client, ResearchError, new_case, check_report, validate_decision, public_url, source_excerpts, resolve_citations, ROLES, TOOLS
 from sample import worked_example, BRIEF
-from server import handler_for, ThreadingHTTPServer
+from server import handler_for, ThreadingHTTPServer, VisitorWorkspaces
 
 def call(name,args):return {'choices':[{'message':{'tool_calls':[{'id':'call-test','type':'function','function':{'name':name,'arguments':json.dumps(args)}}]}}],'usage':{'total_tokens':20}}
 
@@ -338,5 +338,36 @@ class HTTPTests(unittest.TestCase):
     def test_cross_origin_and_bad_brief_rejected(self):
         self.assertEqual(self.request('/api/sample',{},origin='https://unrelated.example')[0],403)
         self.assertEqual(self.request('/api/cases',{'brief':'too short','connection':{}})[0],400)
+
+
+class HostedHTTPTests(unittest.TestCase):
+    def test_browser_workspaces_are_isolated_and_https_origin_works(self):
+        with tempfile.TemporaryDirectory() as folder:
+            workspaces=VisitorWorkspaces(Path(folder)/'visitors')
+            server=ThreadingHTTPServer(('127.0.0.1',0),handler_for(None,None,workspaces))
+            thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
+            def request(path,body=None,cookie=None,origin=None):
+                conn=http.client.HTTPConnection('127.0.0.1',server.server_port,timeout=3)
+                headers={'Content-Type':'application/json'}
+                if cookie:headers['Cookie']=cookie
+                if origin:headers['Origin']=origin
+                conn.request('POST' if body is not None else 'GET',path,json.dumps(body) if body is not None else None,headers)
+                result=conn.getresponse();raw=result.read();status=result.status;issued=result.getheader('Set-Cookie');conn.close()
+                return status,json.loads(raw),issued
+            try:
+                status,_,cookie=request('/api/cases')
+                self.assertEqual(status,200);self.assertIn('HttpOnly',cookie);self.assertIn('Secure',cookie)
+                cookie=cookie.split(';')[0]
+                origin='https://127.0.0.1:'+str(server.server_port)
+                status,case,_=request('/api/sample',{},cookie,origin)
+                self.assertEqual(status,201)
+                self.assertEqual(len(request('/api/cases',cookie=cookie)[1]['cases']),1)
+                _,other,other_cookie=request('/api/cases')
+                self.assertEqual(other['cases'],[])
+                self.assertEqual(request('/api/cases/'+case['id'],cookie=other_cookie.split(';')[0])[0],404)
+                self.assertEqual(request('/api/cases/'+case['id']+'/decision',{'choice':'drop'},other_cookie.split(';')[0],origin)[0],400)
+                self.assertEqual(request('/api/sample',{},cookie,'https://unrelated.example')[0],403)
+            finally:
+                server.shutdown();server.server_close();workspaces.close()
 
 if __name__=='__main__':unittest.main()

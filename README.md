@@ -32,6 +32,14 @@ In **Connect your tools**, enter a Nebius or Fireworks API key, the exact ID of 
 
 To explore without API keys, open the worked example. It is labeled as a curated example and makes no API calls.
 
+## Hosting
+
+The repository includes a Render Blueprint in `render.yaml`. Connect this repository in Render, create a Blueprint and deploy the `three-angles` web service. It uses Python directly, listens on the assigned port and checks `/health`.
+
+Hosted mode separates visitor histories using an anonymous, secure browser cookie. No provider keys need to be configured on the host: visitors connect their own tools in the app. Local mode retains the original single-user workspace.
+
+The free Render configuration uses temporary storage. Export research you want to keep; history can be lost when the service sleeps, restarts or redeploys. For durable storage, use a hosting plan with a persistent disk and set `DATA_DIR` to its mounted path. The free service can also take time to wake after inactivity.
+
 ## How it works
 
 The three investigators use the same configured model in separate conversations, each with a different role and its own sources. Python worker threads run them concurrently.
@@ -74,6 +82,6 @@ That was a useful reminder: not finding a feature in the first few sources does 
 python3 -m unittest discover -s tests -v
 ```
 
-The 35 automated tests cover orchestration, source references, follow-ups and recovery. A complete Nebius/Tavily investigation was also checked on October 31, 2026. See [the validation record](docs/VALIDATION.txt) for details.
+The 36 automated tests cover orchestration, source references, follow-ups and recovery. A complete Nebius/Tavily investigation was also checked on October 31, 2026. See [the validation record](docs/VALIDATION.txt) for details.
 
 Source excerpts help trace a finding back to a page; they do not prove that its interpretation is correct. The workspace supports research and a human decision. Establishing product demand still needs conversations with users and practical tests.

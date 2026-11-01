@@ -2,7 +2,7 @@ Three Angles — validation record
 Checked: October 31, 2026
 
 Automated checks
-35 tests passed on Python 3.13.2. JavaScript syntax checking also passed.
+36 tests passed on Python 3.13.2. JavaScript syntax checking also passed.
 Tests use simulated model and Tavily responses, with real Python orchestration,
 SQLite writes and local HTTP handlers.
 
@@ -45,3 +45,7 @@ Fixes checked during this run
 Browser checks
 The curated example, evidence inspector and sample-to-live boundary were
 checked locally. The curated example is labeled and makes no provider calls.
+
+Hosting preparation: checked HTTPS same-origin requests, secure session cookies,
+separate visitor history listings and rejection of access to another visitor’s
+investigation. Live deployment verification is pending hosting sign-in.

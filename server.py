@@ -4,20 +4,50 @@ from pathlib import Path
 import argparse
 import json
 import threading
+import os
+import secrets
+import re
+from http.cookies import SimpleCookie
 from urllib.parse import urlsplit
 from research import Store, Engine, ResearchError, ROLES, now
 from sample import worked_example
 
 ROOT=Path(__file__).resolve().parent
 
-def handler_for(store,engine):
+class VisitorWorkspaces:
+    """Separate anonymous browser workspaces for hosted deployments."""
+    def __init__(self,path):
+        self.path=Path(path);self.backends={};self.lock=threading.Lock()
+    def get(self,session):
+        with self.lock:
+            if session not in self.backends:
+                store=Store(self.path/(session+'.sqlite3'));store.recover_interrupted()
+                self.backends[session]=(store,Engine(store))
+            return self.backends[session]
+    def close(self):
+        for _,engine in self.backends.values():engine.jobs.shutdown(wait=False,cancel_futures=True)
+
+def handler_for(store,engine,workspaces=None):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self,*args):pass
+        def backend(self):
+            if workspaces is None:return store,engine
+            cookie=SimpleCookie()
+            try:cookie.load(self.headers.get('Cookie',''))
+            except Exception:pass
+            session=cookie.get('three_angles_session')
+            session=session.value if session else ''
+            if not re.fullmatch(r'[a-f0-9]{64}',session):
+                session=secrets.token_hex(32)
+                self.session_cookie=f'three_angles_session={session}; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=2592000'
+            return workspaces.get(session)
         def reply(self,value,status=200,mime='application/json'):
             raw=value if isinstance(value,bytes) else json.dumps(value).encode()
             self.send_response(status);self.send_header('Content-Type',mime);self.send_header('Content-Length',str(len(raw)))
+            if getattr(self,'session_cookie',None):self.send_header('Set-Cookie',self.session_cookie)
             self.send_header('Cache-Control','no-store');self.send_header('X-Content-Type-Options','nosniff');self.end_headers();self.wfile.write(raw)
         def do_GET(self):
+            store,engine=self.backend() if urlsplit(self.path).path.startswith('/api/') else (None,None)
             path=urlsplit(self.path).path
             try:
                 if path=='/':self.reply((ROOT/'src/index.html').read_bytes(),mime='text/html; charset=utf-8')
@@ -31,8 +61,9 @@ def handler_for(store,engine):
             except ResearchError as e:self.reply({'error':str(e)},404)
         def do_POST(self):
             origin=self.headers.get('Origin')
-            if origin and origin!='http://'+self.headers.get('Host',''):
+            if origin and origin not in {'http://'+self.headers.get('Host',''),'https://'+self.headers.get('Host','')}:
                 self.reply({'error':'Cross-origin request rejected.'},403);return
+            store,engine=self.backend()
             try:
                 size=int(self.headers.get('Content-Length','0'))
                 if not 0<size<=50000:self.reply({'error':'Request is too large or empty.'},413);return
@@ -64,11 +95,13 @@ def handler_for(store,engine):
     return Handler
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('--host',default='127.0.0.1');parser.add_argument('--port',type=int,default=8766)
+    parser=argparse.ArgumentParser();parser.add_argument('--host',default=os.environ.get('HOST','127.0.0.1'));parser.add_argument('--port',type=int,default=int(os.environ.get('PORT',8766)))
     args,_=parser.parse_known_args()
-    store=Store(ROOT/'.data/investigations.sqlite3');engine=Engine(store)
+    data=Path(os.environ.get('DATA_DIR',str(ROOT/'.data')))
+    store=Store(data/'investigations.sqlite3');engine=Engine(store)
+    workspaces=VisitorWorkspaces(data/'visitors') if os.environ.get('HOSTED')=='1' else None
     try:
-        server=ThreadingHTTPServer((args.host,args.port),handler_for(store,engine))
+        server=ThreadingHTTPServer((args.host,args.port),handler_for(store,engine,workspaces))
     except OSError:
         engine.jobs.shutdown(wait=False)
         parser.exit(1,f'Port {args.port} is unavailable. Close the existing Three Angles server or choose --port 8767.\n')
@@ -79,3 +112,4 @@ if __name__=='__main__':
     except KeyboardInterrupt:pass
     finally:
         server.server_close();engine.jobs.shutdown(wait=False,cancel_futures=True)
+        if workspaces:workspaces.close()

@@ -43,4 +43,4 @@ Transient service errors retry once. A failed investigator retains its evidence 
 
 The browser uses plain HTML, CSS and JavaScript. Three color-coded investigator panels show progress, findings and source activity. The evidence inspector, challenge action, revision history and decision notes keep review in the same workspace.
 
-The app runs on a local Python HTTP server. It has not been deployed as a hosted multiuser service.
+The app runs on a local Python HTTP server. Hosted mode separates anonymous visitor workspaces using a secure cookie and separate SQLite files. `HOSTED=1` enables this mode; `HOST`, `PORT` and `DATA_DIR` configure the runtime. The Render Blueprint uses temporary storage on the free plan.
