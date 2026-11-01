@@ -1,6 +1,6 @@
 Three Angles submission validation
 Date: 2026-10-31
-Result: 34 tests passed on Python 3.13.2.
+Result: 35 tests passed on Python 3.13.2.
 JavaScript syntax check: passed using node --check src/app.js.
 
 Automated tests use controlled model and Tavily responses. They exercise real Python orchestration, SQLite writes and local HTTP handlers, but are not a measurement of live model quality.
@@ -21,3 +21,5 @@ Live recovery verified: Problem investigator completed on 2026-10-31 using saved
 The Existing-solutions live recovery reached its call limit after repeated quote mismatches and blocked attempts to reread sources. The correction now identifies the offending finding/source and returns a verbatim source-text excerpt for inspection without approving the claim. Cached source rereads are permitted without new extraction; repeated searches remain blocked. A simulated regression exercises invalid quote, cached reread and valid resubmission within five model calls. Live completion of this investigator after the fix remains to be verified.
 
 A further live attempt still failed exact-copy quote validation. The native tool contract now uses excerpt IDs: open_source returns up to 24 source spans with IDs, publish_findings selects an ID, and code inserts the verbatim span. Invented IDs and unopened-source citations remain rejected. The compatibility validator still checks literal quotes for old fixtures. Three new local tests verify ID resolution, span provenance, and full investigator completion using the new contract. Live completion after this change remains unverified.
+
+All three live investigators have now submitted findings. The Skeptic cites Town leadership-decision-log and Groundnote decision-tracking vendor pages as counterexamples to a blanket feature-gap claim. These are vendor claims, not independent product tests. The final comparison failed under its previous free-form JSON contract; its unrecorded response cannot establish the precise cause. Comparison now uses a structured native compile_recommendation result with clearer failure reporting. The existing saved reports can be compared without rerunning investigators or search. Full live comparison remains to be verified.

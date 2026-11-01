@@ -47,7 +47,7 @@ flowchart TD
     Followup --> Compare
 ```
 
-Each investigator has a separate model conversation, source registry and tool history. Python worker threads run them concurrently. They use the same configured model, with different role instructions. A separate synthesis call compares the finished reports. Native tool-call batches are handled sequentially, and a response without a tool call receives a bounded correction within the existing call limit.
+Each investigator has a separate model conversation, source registry and tool history. Python worker threads run them concurrently. They use the same configured model, with different role instructions. A separate synthesis call compares the finished reports using a structured compile_recommendation tool result. Native tool-call batches are handled sequentially, and a response without a tool call receives a bounded correction within the existing call limit.
 
 The three tools are `search_web`, `open_source`, and `publish_findings`. An investigator chooses a tool, receives its result, and chooses the next step. Each round allows at most seven model calls, two searches and three opened sources per investigator. Repeated successful searches are blocked; already-opened sources can be reread from cached text without another extraction. Transient service errors retry once. The initial round allows up to 21 investigator calls plus one synthesis call; retries are additional HTTP attempts.
 
@@ -76,7 +76,7 @@ This is a local research workspace. It does not send messages, make purchases or
 python3 -m unittest discover -s tests -v
 ```
 
-**34 automated tests pass** as of October 31, 2026. Tests use simulated provider responses to exercise concurrency, follow-ups, cancellation, tool errors and source checks. They do not measure live research quality. Live account verification is recorded separately in `docs/VALIDATION.txt`.
+**35 automated tests pass** as of October 31, 2026. Tests use simulated provider responses to exercise concurrency, follow-ups, cancellation, tool errors and source checks. They do not measure live research quality. Live account verification is recorded separately in `docs/VALIDATION.txt`.
 
 ## Week 3 materials
 

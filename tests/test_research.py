@@ -24,9 +24,10 @@ class FakeClient:
         return {'results':[{'url':'https://example.com/evidence','title':'Test evidence','raw_content':'Teams record decisions in a document. This test does not establish willingness to pay.'}]}
     def extract(self,url):return {'results':[{'raw_content':'Teams record decisions in a document.'}]}
     def model(self,messages,tools=None):
-        if not tools:
+        if not tools or tools[0]['function']['name']=='compile_recommendation':
             reports=json.loads(messages[1]['content'])['reports'];ids=[r['findings'][0]['id'] for r in reports.values()]
-            return {'choices':[{'message':{'content':json.dumps({'recommendation':'insufficient_evidence','summary':'The test evidence establishes only a documented workflow.','tensions':[{'type':'unanswered','question':'Will users adopt it?','explanation':'This remains untested.','finding_ids':ids}],'next_experiment':'Observe five users completing the same retrieval task.'})}}]}
+            result={'recommendation':'insufficient_evidence','summary':'The test evidence establishes only a documented workflow.','tensions':[{'type':'unanswered','question':'Will users adopt it?','explanation':'This remains untested.','finding_ids':ids}],'next_experiment':'Observe five users completing the same retrieval task.'}
+            return call('compile_recommendation',result) if tools else {'choices':[{'message':{'content':json.dumps(result)}}]}
         outputs=[m for m in messages if m['role']=='tool']
         if len(outputs)==0:return call('search_web',{'query':'documented team decision workflow'})
         if len(outputs)==1:
@@ -156,7 +157,7 @@ class ResearchTests(unittest.TestCase):
         class CancelDuringSynthesis(FakeClient):
             def model(self,messages,tools=None):
                 result=super().model(messages,tools)
-                if tools is None:
+                if tools is None or tools[0]['function']['name']=='compile_recommendation':
                     case_id=store.list()[0]['id']
                     store.update(case_id,lambda c:c.update(cancelled=True,status='cancelled'))
                 return result
@@ -174,7 +175,7 @@ class ResearchTests(unittest.TestCase):
         seen=[]
         class InspectPrompts(FakeClient):
             def model(self,messages,tools=None):
-                seen.append((bool(tools),messages[0]['content']))
+                seen.append((bool(tools) and tools[0]['function']['name']!='compile_recommendation',messages[0]['content']))
                 return super().model(messages,tools)
         e=self.engine(InspectPrompts);c=e.start(BRIEF,{})
         self.assertEqual(self.wait(e,c['id'])['status'],'ready')
@@ -211,7 +212,7 @@ class ResearchTests(unittest.TestCase):
     def test_missing_tool_call_gets_bounded_correction(self):
         class ProseFirst(FakeClient):
             def model(self,messages,tools=None):
-                if tools and not any(m['role']=='tool' for m in messages) and len(messages)==2:
+                if tools and tools[0]['function']['name']!='compile_recommendation' and not any(m['role']=='tool' for m in messages) and len(messages)==2:
                     return {'choices':[{'message':{'content':'I will research this.'}}]}
                 return super().model(messages,tools)
         e=self.engine(ProseFirst);c=e.start(BRIEF,{});final=self.wait(e,c['id'])
@@ -306,6 +307,16 @@ class ResearchTests(unittest.TestCase):
         self.assertEqual(len(excerpts),24)
         self.assertEqual(len({e['quote_id'] for e in excerpts}),24)
         self.assertTrue(all(e['text'] in source['text'] for e in excerpts))
+    def test_bad_comparison_result_retains_all_reports_and_reports_reason(self):
+        class BadComparison(FakeClient):
+            def model(self,messages,tools=None):
+                if tools and tools[0]['function']['name']=='compile_recommendation':
+                    return call('unavailable_tool',{})
+                return super().model(messages,tools)
+        e=self.engine(BadComparison);c=e.start(BRIEF,{});final=self.wait(e,c['id'])
+        self.assertEqual(final['status'],'partial');self.assertIsNone(final['decision'])
+        self.assertTrue(all(a['status']=='done' and a['report'] for a in final['agents'].values()))
+        self.assertIn('compile_recommendation',final['events'][-1]['detail'])
 
 class HTTPTests(unittest.TestCase):
     def setUp(self):
