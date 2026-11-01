@@ -15,3 +15,5 @@ The adapter now supports up to three native calls per response and a bounded cor
 Browser verification: curated example, source inspector and sample-to-live boundary checked locally. This is not a live research demonstration.
 
 A subsequent live retry returned four native source-read calls, exposing the batch-cardinality cap. The cap is removed: all calls receive observations, but only three sources may be opened; excess source reads receive budget feedback. Recovery of a failed investigator with saved search results no longer permits a new web search. Regression tests verify both cases. Live completion after this update remains unverified.
+
+Live recovery verified: Problem investigator completed on 2026-10-31 using saved searches, three opened sources and two model responses. The other investigators still require recovery. Manual review found overconfident negative product-feature claims and an Acta quote that supports changed-decision history. Prompt instructions now distinguish missing documentation from verified feature absence and require synthesis to check quotes against investigator conclusions. The saved original report is retained unchanged for review.
