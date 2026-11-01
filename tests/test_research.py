@@ -186,6 +186,37 @@ class ResearchTests(unittest.TestCase):
         e.retry_synthesis(c['id'],{});after=self.wait(e,c['id'])
         self.assertEqual(after['status'],'ready');self.assertEqual(after['agents'],before['agents'])
         self.assertIsNotNone(after['decision'])
+    def test_batched_source_reads_finish_with_matching_tool_responses(self):
+        class BatchedClient(FakeClient):
+            def search(self,query):
+                item=super().search(query)['results'][0]
+                return {'results':[item,{**item,'url':'https://example.com/second'}]}
+            def model(self,messages,tools=None):
+                outputs=[m for m in messages if m['role']=='tool']
+                if tools and len(outputs)==1:
+                    sources=json.loads(outputs[0]['content'])['results']
+                    calls=[]
+                    for i,source in enumerate(sources):
+                        c=call('open_source',{'source_id':source['id']})['choices'][0]['message']['tool_calls'][0]
+                        c['id']=f'open-{i}';calls.append(c)
+                    return {'choices':[{'message':{'tool_calls':calls}}]}
+                if tools and len(outputs)==3:
+                    batch=next(m for m in messages if m['role']=='assistant' and len(m.get('tool_calls',[]))==2)
+                    self_ids={c['id'] for c in batch['tool_calls']}
+                    assert self_ids <= {m['tool_call_id'] for m in outputs}
+                return super().model(messages,tools)
+        e=self.engine(BatchedClient);c=e.start(BRIEF,{});final=self.wait(e,c['id'])
+        self.assertEqual(final['status'],'ready')
+        self.assertEqual(sum(x['action']=='opened' for x in final['events']),6)
+    def test_missing_tool_call_gets_bounded_correction(self):
+        class ProseFirst(FakeClient):
+            def model(self,messages,tools=None):
+                if tools and not any(m['role']=='tool' for m in messages) and len(messages)==2:
+                    return {'choices':[{'message':{'content':'I will research this.'}}]}
+                return super().model(messages,tools)
+        e=self.engine(ProseFirst);c=e.start(BRIEF,{});final=self.wait(e,c['id'])
+        self.assertEqual(final['status'],'ready')
+        self.assertTrue(all(a['model_calls']==4 for a in final['agents'].values()))
 
 class HTTPTests(unittest.TestCase):
     def setUp(self):

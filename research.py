@@ -216,58 +216,72 @@ class Engine:
                     a=c['agents'][role];a['tokens']+=usage if isinstance(usage,int) and usage>=0 else 0
                 self.store.update(case_id,count)
                 calls=response.get('choices',[{}])[0].get('message',{}).get('tool_calls',[])
-                if not isinstance(calls,list) or len(calls)!=1:raise ResearchError('Model must choose exactly one native tool per turn.')
-                call=calls[0];name=call['function']['name'];args=json.loads(call['function']['arguments'])
-                if not isinstance(args,dict):raise ResearchError('Tool arguments must be an object.')
-                messages.append({'role':'assistant','content':None,'tool_calls':[call]})
-                try:
-                    signature=json.dumps({'tool':name,'args':args},sort_keys=True)
-                    if signature in completed_actions:raise ResearchError('Identical completed action blocked. Use a new query, a different source, or publish what is known.')
-                    if name not in {t['function']['name'] for t in allowed}:raise ResearchError('This tool is unavailable at the current budget boundary.')
-                    if name=='search_web':
-                        query=args.get('query','')
-                        if not isinstance(query,str) or not 3<=len(query)<=400:raise ResearchError('Search query must be 3–400 characters.')
-                        if searches>=2:raise ResearchError('Search budget reached. Inspect existing results or publish explicit unknowns.')
-                        searches+=1;self.store.event(case_id,role,'search',query,version=version)
-                        self.store.update(case_id,lambda c:c['agents'][role].update(search_calls=c['agents'][role]['search_calls']+1))
-                        result=client.search(query);items=[]
-                        for item in result.get('results',[])[:4]:
-                            if not public_url(item.get('url')):continue
-                            existing=next((s for s in sources.values() if s['url']==item['url']),None)
-                            sid=existing['id'] if existing else f'{role}-v{version}-S{len(sources)+1}'
-                            if not existing:
-                                text=item.get('raw_content') or item.get('content') or ''
-                                sources[sid]={'id':sid,'url':item['url'],'title':str(item.get('title') or item['url'])[:250],'text':str(text)[:12000],'full_text':bool(item.get('raw_content')),'retrieved_at':now(),'query':query}
-                            items.append({k:sources[sid][k] for k in ['id','url','title'] }|{'snippet':sources[sid]['text'][:800]})
-                        self.store.update(case_id,lambda c:c['agents'][role].update(sources={**c['agents'][role]['sources'],**copy.deepcopy(sources)}))
-                        output={'results':items,'note':'Search summaries are not opened evidence. Open relevant source IDs.'}
-                        self.store.event(case_id,role,'search_result',f'{len(items)} sources returned.',source_ids=[x['id'] for x in items],version=version)
-                    elif name=='open_source':
-                        sid=args.get('source_id')
-                        if sid not in sources:raise ResearchError('Open an ID from this investigator\'s search results.')
-                        if len(opened)>=3 and sid not in opened:raise ResearchError('Opened-source budget reached.')
-                        source=sources[sid]
-                        if not source['full_text']:
-                            extraction=client.extract(source['url']);items=extraction.get('results',[])
-                            if not items or not items[0].get('raw_content'):raise ResearchError('Source extraction failed. Choose another result or state the gap.')
-                            source['text']=str(items[0]['raw_content'])[:12000];source['full_text']=True
-                        opened.add(sid);output={k:source[k] for k in ['id','title','url','text']}
-                        self.store.update(case_id,lambda c:c['agents'][role].update(sources={**c['agents'][role]['sources'],**copy.deepcopy(sources)}))
-                        self.store.event(case_id,role,'opened',source['title'],source_id=sid,version=version)
-                    elif name=='publish_findings':
-                        if not searches:raise ResearchError('Investigate with search before publishing findings.')
-                        report=check_report(args,sources,opened,role,version)
-                        self.assert_active(case_id)
-                        def finish(c):
-                            agent=c['agents'][role]
-                            if agent['report']:agent['history'].append(agent['report'])
-                            agent.update(report=report,status='done',sources={**agent['sources'],**sources})
-                        self.store.update(case_id,finish);self.store.event(case_id,role,'findings',report['conclusion'],finding_ids=[f['id'] for f in report['findings']],version=version);return
-                    else:raise ResearchError('Unavailable tool rejected.')
-                    completed_actions.add(signature)
-                except ResearchError as error:
-                    output={'error':str(error)};self.store.event(case_id,role,'tool_error',str(error),version=version)
-                messages.append({'role':'tool','tool_call_id':call['id'],'content':json.dumps(output)})
+                if not isinstance(calls,list):raise ResearchError('Model tool calls were malformed.')
+                self.store.event(case_id,role,'model_response',f'{len(calls)} native tool calls returned.',version=version)
+                if not calls:
+                    messages.append({'role':'user','content':'No native tool call was returned. Choose one of the supplied native tools now. Search or open sources if needed, otherwise submit publish_findings. Do not answer in prose.'})
+                    continue
+                if len(calls)>3:raise ResearchError('Model exceeded the three-tool batch limit.')
+                ids=[c.get('id') for c in calls if isinstance(c,dict)]
+                if len(ids)!=len(calls) or not all(isinstance(x,str) and x for x in ids) or len(set(ids))!=len(ids):
+                    raise ResearchError('Tool call IDs were missing or duplicated.')
+                messages.append({'role':'assistant','content':None,'tool_calls':calls})
+                for call in calls:
+                    self.assert_active(case_id)
+                    name=call['function']['name']
+                    try:
+                        args=json.loads(call['function']['arguments'])
+                        if not isinstance(args,dict):raise ResearchError('Tool arguments must be an object.')
+                        if len(calls)>1 and any(c.get('function',{}).get('name')=='publish_findings' for c in calls):
+                            raise ResearchError('Publish findings in a separate tool call after all source reads finish.')
+                        signature=json.dumps({'tool':name,'args':args},sort_keys=True)
+                        if signature in completed_actions:raise ResearchError('Identical completed action blocked. Use a new query, a different source, or publish what is known.')
+                        if name not in {t['function']['name'] for t in allowed}:raise ResearchError('This tool is unavailable at the current budget boundary.')
+                        if name=='search_web':
+                            query=args.get('query','')
+                            if not isinstance(query,str) or not 3<=len(query)<=400:raise ResearchError('Search query must be 3–400 characters.')
+                            if searches>=2:raise ResearchError('Search budget reached. Inspect existing results or publish explicit unknowns.')
+                            searches+=1;self.store.event(case_id,role,'search',query,version=version)
+                            self.store.update(case_id,lambda c:c['agents'][role].update(search_calls=c['agents'][role]['search_calls']+1))
+                            result=client.search(query);items=[]
+                            for item in result.get('results',[])[:4]:
+                                if not public_url(item.get('url')):continue
+                                existing=next((s for s in sources.values() if s['url']==item['url']),None)
+                                sid=existing['id'] if existing else f'{role}-v{version}-S{len(sources)+1}'
+                                if not existing:
+                                    text=item.get('raw_content') or item.get('content') or ''
+                                    sources[sid]={'id':sid,'url':item['url'],'title':str(item.get('title') or item['url'])[:250],'text':str(text)[:12000],'full_text':bool(item.get('raw_content')),'retrieved_at':now(),'query':query}
+                                items.append({k:sources[sid][k] for k in ['id','url','title'] }|{'snippet':sources[sid]['text'][:800]})
+                            self.store.update(case_id,lambda c:c['agents'][role].update(sources={**c['agents'][role]['sources'],**copy.deepcopy(sources)}))
+                            output={'results':items,'note':'Search summaries are not opened evidence. Open relevant source IDs.'}
+                            self.store.event(case_id,role,'search_result',f'{len(items)} sources returned.',source_ids=[x['id'] for x in items],version=version)
+                        elif name=='open_source':
+                            sid=args.get('source_id')
+                            if sid not in sources:raise ResearchError('Open an ID from this investigator\'s search results.')
+                            if len(opened)>=3 and sid not in opened:raise ResearchError('Opened-source budget reached.')
+                            source=sources[sid]
+                            if not source['full_text']:
+                                extraction=client.extract(source['url']);items=extraction.get('results',[])
+                                if not items or not items[0].get('raw_content'):raise ResearchError('Source extraction failed. Choose another result or state the gap.')
+                                source['text']=str(items[0]['raw_content'])[:12000];source['full_text']=True
+                            opened.add(sid);output={k:source[k] for k in ['id','title','url','text']}
+                            self.store.update(case_id,lambda c:c['agents'][role].update(sources={**c['agents'][role]['sources'],**copy.deepcopy(sources)}))
+                            self.store.event(case_id,role,'opened',source['title'],source_id=sid,version=version)
+                        elif name=='publish_findings':
+                            if not searches:raise ResearchError('Investigate with search before publishing findings.')
+                            report=check_report(args,sources,opened,role,version)
+                            self.assert_active(case_id)
+                            def finish(c):
+                                agent=c['agents'][role]
+                                if agent['report']:agent['history'].append(agent['report'])
+                                agent.update(report=report,status='done',sources={**agent['sources'],**sources})
+                            self.store.update(case_id,finish);self.store.event(case_id,role,'findings',report['conclusion'],finding_ids=[f['id'] for f in report['findings']],version=version);return
+                        else:raise ResearchError('Unavailable tool rejected.')
+                        completed_actions.add(signature)
+                    except (ResearchError,ValueError,KeyError,TypeError) as error:
+                        detail=str(error) if isinstance(error,ResearchError) else 'Tool arguments were malformed. Correct them and try again.'
+                        output={'error':detail};self.store.event(case_id,role,'tool_error',detail,version=version)
+                    messages.append({'role':'tool','tool_call_id':call['id'],'content':json.dumps(output)})
             raise ResearchError('Model-call limit reached before valid findings were submitted.')
         except Cancelled:
             self.store.update(case_id,lambda c:c['agents'][role].update(status='cancelled'));return

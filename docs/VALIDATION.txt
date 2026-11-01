@@ -1,6 +1,6 @@
 Three Angles submission validation
 Date: 2026-10-31
-Result: 26 tests passed in 1.862 seconds on Python 3.13.2.
+Result: 28 tests passed in 2.017 seconds on Python 3.13.2.
 JavaScript syntax check: passed using node --check src/app.js.
 
 Automated tests use controlled model and Tavily responses. They exercise real Python orchestration, SQLite writes and local HTTP handlers, but are not a measurement of live model quality.
@@ -9,5 +9,7 @@ Coverage includes concurrent independent investigators; bounded loops; follow-up
 
 The injection-boundary check verifies that both model stages receive the untrusted-data instruction. It is not a claim that all prompt injections or jailbreaks are defeated. Unavailable tools are rejected in code.
 
-Live provider verification: pending user-configured keys and a completed live investigation.
+Live provider verification: First live attempt on 2026-10-31 reached Nebius and Tavily. All three searches returned sources. The run stopped at the next model responses because the adapter required exactly one tool call. Six investigator model calls, three searches and 8,463 reported tokens were recorded; no synthesis was produced. Elapsed time was approximately 6.12 seconds.
+
+The adapter now supports up to three native calls per response and a bounded correction for missing tool calls. Added regression tests cover matching tool-response IDs for batched reads and recovery from a prose-only response. Full live completion remains to be verified after this fix.
 Browser verification: curated example, source inspector and sample-to-live boundary checked locally. This is not a live research demonstration.
