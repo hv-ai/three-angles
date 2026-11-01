@@ -30,6 +30,31 @@ class Cancelled(ResearchError):pass
 
 def now():return datetime.now(timezone.utc).isoformat()
 def normal(text):return re.sub(r'\s+',' ',text).strip().casefold()
+def source_excerpts(source):
+    chunks=[]
+    for paragraph in re.split(r'\n+|(?<=[.!?])\s+',source['text']):
+        paragraph=paragraph.strip()
+        if len(paragraph)<25:continue
+        for start in range(0,len(paragraph),400):
+            text=paragraph[start:start+400].strip()
+            if len(text)>=25:chunks.append(text)
+    if not chunks and source['text'].strip():chunks=[source['text'].strip()[:400]]
+    if len(chunks)>24:chunks=[chunks[round(i*(len(chunks)-1)/23)] for i in range(24)]
+    return [{'quote_id':f"{source['id']}-Q{i}",'text':text} for i,text in enumerate(chunks,1)]
+
+def resolve_citations(args,sources,opened):
+    args=copy.deepcopy(args)
+    if not isinstance(args,dict) or not isinstance(args.get('findings'),list):return args
+    for i,finding in enumerate(args['findings'],1):
+        if not isinstance(finding,dict) or 'quote_id' not in finding:continue
+        sid=finding.get('source_id');qid=finding.pop('quote_id')
+        if not sid and not qid:
+            finding['quote']='';continue
+        if sid not in opened or sid not in sources:raise ResearchError(f'Finding {i}: open the cited source before selecting its excerpt.')
+        excerpt=next((e for e in sources[sid].get('excerpts',[]) if e['quote_id']==qid),None)
+        if not excerpt:raise ResearchError(f'Finding {i}: select a quote_id returned by open_source for {sid}. Do not invent an ID.')
+        finding['quote']=excerpt['text']
+    return args
 def public_url(url):
     if not isinstance(url,str) or len(url)>2000:return False
     try:
@@ -81,7 +106,7 @@ TOOLS=[schema('search_web','Search the public web for evidence. Maximum two sear
        schema('publish_findings','Submit a grounded investigation. Use unknowns when evidence is missing.',{
           'conclusion':{'type':'string'},'findings':{'type':'array','maxItems':4,'items':{'type':'object','properties':{
               'title':{'type':'string'},'detail':{'type':'string'},'kind':{'type':'string','enum':['observed','inference','unknown']},
-              'source_id':{'type':'string'},'quote':{'type':'string'}},'required':['title','detail','kind','source_id','quote'],'additionalProperties':False}},
+              'source_id':{'type':'string'},'quote_id':{'type':'string','description':'Select an exact quote_id from open_source excerpts; use empty source_id and quote_id for an uncited inference or unknown.'}},'required':['title','detail','kind','source_id','quote_id'],'additionalProperties':False}},
           'unknowns':{'type':'array','items':{'type':'string'}},'next_test':{'type':'string'}},['conclusion','findings','unknowns','next_test'])]
 
 class Client:
@@ -209,7 +234,7 @@ class Engine:
         opened=set();searches=0;completed_actions=set();messages=[{'role':'system','content':
             'You are an independent '+ROLES[role]['name']+'. '+ROLES[role]['instruction']+
             ' Use native tools to investigate, not a generic opinion essay. Search first unless saved_search_results are supplied for recovery; in that case use their IDs directly and do not search again. Open evidence before citing it. Maximum 2 searches, 3 opened sources and 7 model calls. Open at most 3 source IDs, even if search returned more. '
-            'Publish at most 4 specific findings, unknowns and a concrete next test. Observed findings need a short exact quote; inference/unknown must be labeled as such. '
+            'Publish at most 4 specific findings, unknowns and a concrete next test. Cite using a source_id and quote_id from an opened source. The application inserts the exact excerpt; do not copy or generate quote text. For uncited inferences and unknowns use empty source_id and quote_id. '
             'Never invent interviews, customers, willingness to pay, numbers or proof of demand. Marketing text establishes only a vendor claim. '
             'Missing documentation does not prove a feature is absent. Do not say a product cannot, does not, or lacks a capability unless an authoritative source explicitly establishes that limitation. Otherwise state that the reviewed sources do not establish whether the feature exists and list it as unknown. '
             'Read counterexamples carefully: a source saying it links changed decisions is evidence of change tracking, not evidence that it lacks reversal tracking. Titles and conclusions must be no stronger than the supporting quote. Keep the conclusion to two concise sentences and stay within your assigned role. '
@@ -275,12 +300,13 @@ class Engine:
                                 extraction=client.extract(source['url']);items=extraction.get('results',[])
                                 if not items or not items[0].get('raw_content'):raise ResearchError('Source extraction failed. Choose another result or state the gap.')
                                 source['text']=str(items[0]['raw_content'])[:12000];source['full_text']=True
-                            opened.add(sid);output={k:source[k] for k in ['id','title','url','text']}
+                            source['excerpts']=source_excerpts(source)
+                            opened.add(sid);output={k:source[k] for k in ['id','title','url','excerpts']}
                             self.store.update(case_id,lambda c:c['agents'][role].update(sources={**c['agents'][role]['sources'],**copy.deepcopy(sources)}))
                             self.store.event(case_id,role,'opened',source['title'],source_id=sid,version=version)
                         elif name=='publish_findings':
                             if not searches and not reuse_sources:raise ResearchError('Investigate with search before publishing findings.')
-                            report=check_report(args,sources,opened,role,version)
+                            report=check_report(resolve_citations(args,sources,opened),sources,opened,role,version)
                             self.assert_active(case_id)
                             def finish(c):
                                 agent=c['agents'][role]

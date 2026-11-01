@@ -10,7 +10,7 @@ import unittest
 from unittest.mock import patch
 import urllib.error
 import io
-from research import Store, Engine, Client, ResearchError, new_case, check_report, validate_decision, public_url, ROLES, TOOLS
+from research import Store, Engine, Client, ResearchError, new_case, check_report, validate_decision, public_url, source_excerpts, resolve_citations, ROLES, TOOLS
 from sample import worked_example, BRIEF
 from server import handler_for, ThreadingHTTPServer
 
@@ -278,6 +278,34 @@ class ResearchTests(unittest.TestCase):
         self.assertEqual(final['status'],'ready')
         self.assertTrue(all(a['model_calls']==5 and a['search_calls']==1 for a in final['agents'].values()))
         self.assertEqual(sum(x['action']=='tool_error' for x in final['events']),3)
+    def test_excerpt_ids_insert_source_text_instead_of_model_written_quote(self):
+        source={'id':'S1','text':'This is the exact source sentence about the documented workflow.'}
+        source['excerpts']=source_excerpts(source)
+        args={'findings':[{'source_id':'S1','quote_id':source['excerpts'][0]['quote_id'],'quote':'model altered words'}]}
+        result=resolve_citations(args,{'S1':source},{'S1'})
+        self.assertEqual(result['findings'][0]['quote'],source['text'])
+        self.assertEqual(args['findings'][0]['quote'],'model altered words')
+        with self.assertRaises(ResearchError):resolve_citations(args,{'S1':source},set())
+        args['findings'][0]['quote_id']='invented'
+        with self.assertRaises(ResearchError):resolve_citations(args,{'S1':source},{'S1'})
+    def test_native_excerpt_selection_completes_without_copying_quotes(self):
+        class ExcerptClient(FakeClient):
+            def model(self,messages,tools=None):
+                outputs=[m for m in messages if m['role']=='tool']
+                if tools and len(outputs)>=2:
+                    source=json.loads(outputs[-1]['content'])
+                    return call('publish_findings',{'conclusion':'A documented workflow exists. Demand is untested.','findings':[{'title':'Workflow example','detail':'The source describes recording decisions.','kind':'observed','source_id':source['id'],'quote_id':source['excerpts'][0]['quote_id']}],'unknowns':['Whether users would switch'],'next_test':'Observe five users.'})
+                return super().model(messages,tools)
+        e=self.engine(ExcerptClient);c=e.start(BRIEF,{});final=self.wait(e,c['id'])
+        self.assertEqual(final['status'],'ready')
+        self.assertTrue(all(a['model_calls']==3 for a in final['agents'].values()))
+        self.assertTrue(all(a['report']['findings'][0]['quote_checked'] for a in final['agents'].values()))
+    def test_excerpt_sampling_only_returns_real_source_spans(self):
+        source={'id':'S1','text':'\n'.join(f'Source paragraph number {i} explains a documented observation in exact words.' for i in range(80))}
+        excerpts=source_excerpts(source)
+        self.assertEqual(len(excerpts),24)
+        self.assertEqual(len({e['quote_id'] for e in excerpts}),24)
+        self.assertTrue(all(e['text'] in source['text'] for e in excerpts))
 
 class HTTPTests(unittest.TestCase):
     def setUp(self):

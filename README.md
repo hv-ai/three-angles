@@ -55,7 +55,7 @@ Tavily provides public-web search and extraction. Nebius or Fireworks supplies t
 
 ## History and recovery
 
-SQLite stores briefs, evidence, reports, revisions and human decisions in `.data/investigations.sqlite3`. Source quote checks reject fabricated or unopened citations. Findings distinguish observed source claims from inferences and unanswered questions. A quote match establishes text provenance, not whether the conclusion follows from it.
+SQLite stores briefs, evidence, reports, revisions and human decisions in `.data/investigations.sqlite3`. The model selects excerpt IDs from opened sources; the application inserts the corresponding verbatim text. Unknown IDs and unopened citations are rejected. Findings distinguish observed source claims from inferences and unanswered questions. A quote match establishes text provenance, not whether the conclusion follows from it.
 
 Completed reports remain available if another investigator fails. You can retry that investigator. When its search returned sources but no report was completed, recovery reuses those saved results without another web search. Source extraction may still be needed for pages not previously opened. If only the final comparison fails, **Retry comparison using saved research** avoids repeating searches. Stopping research prevents further steps; a provider request already accepted may still be billed. Restarting the server marks unfinished work interrupted and preserves its earlier evidence.
 
@@ -76,7 +76,7 @@ This is a local research workspace. It does not send messages, make purchases or
 python3 -m unittest discover -s tests -v
 ```
 
-**31 automated tests pass** as of October 31, 2026. Tests use simulated provider responses to exercise concurrency, follow-ups, cancellation, tool errors and source checks. They do not measure live research quality. Live account verification is recorded separately in `docs/VALIDATION.txt`.
+**34 automated tests pass** as of October 31, 2026. Tests use simulated provider responses to exercise concurrency, follow-ups, cancellation, tool errors and source checks. They do not measure live research quality. Live account verification is recorded separately in `docs/VALIDATION.txt`.
 
 ## Week 3 materials
 
