@@ -1,6 +1,6 @@
 Three Angles submission validation
 Date: 2026-10-31
-Result: 28 tests passed in 2.017 seconds on Python 3.13.2.
+Result: 30 tests passed on Python 3.13.2.
 JavaScript syntax check: passed using node --check src/app.js.
 
 Automated tests use controlled model and Tavily responses. They exercise real Python orchestration, SQLite writes and local HTTP handlers, but are not a measurement of live model quality.
@@ -13,3 +13,5 @@ Live provider verification: First live attempt on 2026-10-31 reached Nebius and 
 
 The adapter now supports up to three native calls per response and a bounded correction for missing tool calls. Added regression tests cover matching tool-response IDs for batched reads and recovery from a prose-only response. Full live completion remains to be verified after this fix.
 Browser verification: curated example, source inspector and sample-to-live boundary checked locally. This is not a live research demonstration.
+
+A subsequent live retry returned four native source-read calls, exposing the batch-cardinality cap. The cap is removed: all calls receive observations, but only three sources may be opened; excess source reads receive budget feedback. Recovery of a failed investigator with saved search results no longer permits a new web search. Regression tests verify both cases. Live completion after this update remains unverified.

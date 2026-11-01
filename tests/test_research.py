@@ -217,6 +217,47 @@ class ResearchTests(unittest.TestCase):
         e=self.engine(ProseFirst);c=e.start(BRIEF,{});final=self.wait(e,c['id'])
         self.assertEqual(final['status'],'ready')
         self.assertTrue(all(a['model_calls']==4 for a in final['agents'].values()))
+    def test_four_source_requests_return_budget_error_without_aborting(self):
+        class FourReads(FakeClient):
+            def search(self,query):
+                item=super().search(query)['results'][0]
+                return {'results':[{**item,'url':f'https://example.com/{i}'} for i in range(4)]}
+            def model(self,messages,tools=None):
+                outputs=[m for m in messages if m['role']=='tool']
+                if tools and len(outputs)==1:
+                    calls=[]
+                    for i,source in enumerate(json.loads(outputs[0]['content'])['results']):
+                        c=call('open_source',{'source_id':source['id']})['choices'][0]['message']['tool_calls'][0]
+                        c['id']=f'read-{i}';calls.append(c)
+                    return {'choices':[{'message':{'tool_calls':calls}}]}
+                if tools and len(outputs)==5:
+                    assert 'budget' in json.loads(outputs[-1]['content'])['error']
+                    assert len([m for m in outputs if m['tool_call_id'].startswith('read-')])==4
+                    return super().model([m for m in messages if m is not outputs[-1]],tools)
+                return super().model(messages,tools)
+        e=self.engine(FourReads);c=e.start(BRIEF,{});final=self.wait(e,c['id'])
+        self.assertEqual(final['status'],'ready')
+        self.assertEqual(sum(x['action']=='opened' for x in final['events']),9)
+        self.assertEqual(sum(x['action']=='tool_error' for x in final['events']),3)
+    def test_failed_investigator_reuses_search_without_new_search_call(self):
+        class Recover(FakeClient):
+            def search(self,query):raise AssertionError('Recovery must not repeat paid search')
+            def model(self,messages,tools=None):
+                outputs=[m for m in messages if m['role']=='tool']
+                if tools and not outputs:
+                    saved=json.loads(messages[1]['content'])['saved_search_results']
+                    assert 'search_web' not in {t['function']['name'] for t in tools}
+                    return call('open_source',{'source_id':saved[0]['id']})
+                if tools and len(outputs)==1:return super().model(messages+[outputs[0]],tools)
+                return super().model(messages,tools)
+        c=new_case(BRIEF);c['status']='partial'
+        for a in c['agents'].values():a['status']='error'
+        c['agents']['problem']['sources']={'old-S1':{'id':'old-S1','url':'https://example.com/evidence','title':'Retained source','text':'Teams record decisions in a document.','full_text':True}}
+        self.store.put(c);e=self.engine(Recover)
+        e.followup(c['id'],'problem','Finish using saved evidence',{})
+        final=self.wait(e,c['id']);a=final['agents']['problem']
+        self.assertEqual(a['status'],'done');self.assertEqual(a['search_calls'],0)
+        self.assertTrue(any(x['action']=='reuse_search' for x in final['events']))
 
 class HTTPTests(unittest.TestCase):
     def setUp(self):
