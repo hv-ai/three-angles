@@ -1,0 +1,13 @@
+Three Angles submission validation
+Date: 2026-10-31
+Result: 26 tests passed in 1.862 seconds on Python 3.13.2.
+JavaScript syntax check: passed using node --check src/app.js.
+
+Automated tests use controlled model and Tavily responses. They exercise real Python orchestration, SQLite writes and local HTTP handlers, but are not a measurement of live model quality.
+
+Coverage includes concurrent independent investigators; bounded loops; follow-up isolation; preserved source/report revisions; quote provenance; synthesis references; cancellation; restart recovery; atomic event writes; credential exclusion; transient HTTP retry; unavailable tool rejection; null provider usage; and comparison-only retry.
+
+The injection-boundary check verifies that both model stages receive the untrusted-data instruction. It is not a claim that all prompt injections or jailbreaks are defeated. Unavailable tools are rejected in code.
+
+Live provider verification: pending user-configured keys and a completed live investigation.
+Browser verification: curated example, source inspector and sample-to-live boundary checked locally. This is not a live research demonstration.
