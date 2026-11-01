@@ -76,7 +76,7 @@ This is a local research workspace. It does not send messages, make purchases or
 python3 -m unittest discover -s tests -v
 ```
 
-**35 automated tests pass** as of October 31, 2026. Tests use simulated provider responses to exercise concurrency, follow-ups, cancellation, tool errors and source checks. They do not measure live research quality. Live account verification is recorded separately in `docs/VALIDATION.txt`.
+**35 automated tests pass** as of October 31, 2026. Tests use simulated provider responses to exercise concurrency, follow-ups, cancellation, tool errors and source checks. They do not measure live research quality. A live Nebius/Tavily investigation and final comparison also completed on October 31, 2026, after the recovery fixes. The comparison surfaced a counterexample to the initial gap claim and recommended reshaping the idea. This verifies the workflow, not general research accuracy; the detailed record is in `docs/VALIDATION.txt`.
 
 ## Week 3 materials
 
